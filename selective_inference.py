@@ -41,6 +41,7 @@ def overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold, n_steps,
         return interval_oc
 
 def parametric(model, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, zmax = 20):
+    p = X.shape[1]//2
     L1 = np.hstack((np.eye(p), np.zeros((p,p)))) 
     L2 = np.hstack((np.zeros((p,p)), np.eye(p)))
     
@@ -114,7 +115,9 @@ def main(model, p):
 
     return p_value
 
-
+from functools import partial
+def compute_pvalue(model, p, _):
+    return main(model, p)
 if __name__ == "__main__":
     model = model_train.gendata_trainmodel(train=False, device=device)["model"]
     p = 10
@@ -122,11 +125,12 @@ if __name__ == "__main__":
     iteration = 1000
     list_p_value = []
 
-    def compute_pvalue(_):
-        return main(model, p)
+
     num_cores = multiprocessing.cpu_count() // 2
+
+    compute_pvalue_with_args = partial(compute_pvalue, model, p)
     with multiprocessing.Pool(processes=num_cores) as pool:
-        list_p_value = pool.map(compute_pvalue, range(iteration))
+        list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
     # list_p_value.append(pvalue)
 
 
