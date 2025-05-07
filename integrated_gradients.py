@@ -79,13 +79,13 @@ if __name__ == "__main__":
     model, test_data = model_train.gendata_trainmodel().values()
     X_test, y_test = test_data
     print(X_test.shape)
-    X_test = X_test.to(device)  # Ensure X_test is on device
+    # X_test = X_test.to(device)  # Ensure X_test is on device
     with torch.no_grad():
         outputs = model(X_test)
         targets = torch.argmax(outputs, dim=1)
     print("Xtest: ", X_test[:1])
     custom_attributions = custom_integrated_gradients(
-        model, X_test, torch.zeros_like(X_test).to(device), target=targets, n_steps=50
+        model, X_test, torch.zeros_like(X_test), target=targets, n_steps=50
     )
 
     avg_custom_attributions = (
