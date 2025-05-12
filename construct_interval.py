@@ -237,3 +237,118 @@ def thresholdcondition(model, a, b, X, target, number_feas, threshold, n_steps):
     )    
     # print(interval)
     return interval
+
+
+def thresholdcondition2(model, a, b, X, target, number_feas, threshold, n_steps,z=0):
+    n, p = X.shape[0] //2, X.shape[1]
+    # print(n,p)
+
+    alphas = torch.linspace(0, 1, n_steps)
+    model.eval()
+
+    x_tensor = torch.from_numpy(X[:n]).float()
+    xbaseline_tensor = torch.from_numpy(X[n:2*n]).float()
+
+    ig = torch.zeros_like(x_tensor)
+    for alpha in alphas:
+        # Interpolate between baseline and input
+        interpolated = xbaseline_tensor + alpha * (x_tensor - xbaseline_tensor)
+        interpolated = interpolated.to(dtype=torch.float32)
+        interpolated.requires_grad_(True)
+        # Compute model output
+        outputs = model(interpolated)
+
+        # Compute gradients with respect to the interpolated input
+        target_outputs = outputs[torch.arange(outputs.size(0)), target]
+        gradients = torch.autograd.grad(target_outputs.sum(), interpolated, create_graph=True)[0]
+        ig += gradients / n_steps
+
+    # attributions = torch.mean(ig * (x_tensor - xbaseline_tensor), dim=0)
+    # attributions = attributions.detach().cpu().numpy()
+    # print("attributions", attributions)
+    ig = (ig.detach().cpu().numpy()).flatten().reshape((-1,1))
+
+    a_ = (a[:n*p] - a[n*p:2*n*p]).copy()
+    b_ = (b[:n*p] - b[n*p:2*n*p]).copy()
+
+    a_ = a_*ig
+    b_ = b_*ig
+    # print(n,p)
+    # print("a+bz mean", np.mean((a_ + b_*z).reshape((n,p)), axis=0))
+    a_ = np.mean((a_).reshape((n,p)), axis=0)
+    b_ = np.mean((b_).reshape((n,p)), axis=0)
+    # avg_vectorize = np.kron(np.eye(p),(np.ones((n,1))*1/n).T ) 
+    a_ = a_.reshape((p,1))
+    b_ = b_.reshape((p,1))
+    # a_ = avg_vectorize.dot(a_)
+    # b_ = avg_vectorize.dot(b_)
+    # print("a+bz mean: ", np.sign(a_ + b_*z))
+    attributions = a_ + b_*z
+    
+    #sign condition
+    # s1 + s2z > 0
+    interval_1   = [(-np.inf, np.inf)]
+    
+    s1 = np.sign(attributions) * a_
+    s2 = np.sign(attributions) * b_
+
+    for i in range(p):
+        interval_1 = util.interval_intersection(
+            interval_1,
+            util.solve_quadratic_inequality(a=0, b=-s2[i][0], c=-s1[i][0])
+        )
+    # print(interval_1)
+
+
+    #sort condition
+    interval_2 = [(-np.inf, np.inf)]
+    indexsort = np.argsort(np.abs(attributions.reshape(-1)))[::-1]
+    # print("abs attr",np.abs(attributions))
+    # print(indexsort)
+    # a1 > a2 > a3 > a4
+    e = np.zeros((p,1))
+    for i in range(p-1):
+        e[indexsort[i]][0] = 1
+        for j in range(i+1,p):
+            e[indexsort[j]][0] = -1
+            interval_2 = util.interval_intersection(
+                interval_2, 
+                util.solve_quadratic_inequality(a=0, b=-(e.T.dot(s2)).item(), c=-(e.T.dot(s1)).item())
+            )
+            e[indexsort[j]][0] = 0
+        e[indexsort[i]][0] = 0
+    # print(interval_2)
+
+
+    #threshold condition
+    ep = threshold/100 * np.ones((p,1))
+    #s[i-1] < threshold*sum (sp) <= s[i]
+
+    ei_minus1 = np.zeros((p,1))
+    for i in range(number_feas-1):
+        ei_minus1[indexsort[i]][0] = 1
+    
+    ei = ei_minus1.copy()
+    ei[indexsort[number_feas-1]][0] = 1
+
+    interval_3 = [(-np.inf, np.inf)]
+
+    epi = ep - ei
+
+    interval_3 = util.interval_intersection(
+        interval_3,
+        util.solve_quadratic_inequality(a=0, b=(epi.T.dot(s2)).item(), c=(epi.T.dot(s1)).item())
+        )
+    ei_minus1p = ei_minus1 - ep
+
+    interval_3 = util.interval_intersection(
+        interval_3,
+        util.solve_quadratic_inequality(a=0, b=(ei_minus1p.T.dot(s2)).item(), c=(ei_minus1p.T.dot(s1)).item())
+        )
+
+    interval = util.interval_intersection(
+        interval_1,
+        util.interval_intersection(interval_2, interval_3)
+    )    
+    # print(interval)
+    return interval

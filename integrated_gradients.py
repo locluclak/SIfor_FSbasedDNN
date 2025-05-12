@@ -60,6 +60,7 @@ def compute_integrated_gradients(model, X_test, feature_names, n_steps=50,device
 # Get significant features
 def get_threshold_attributions(values, percentile) -> np.ndarray:
     assert 0 <= percentile <= 100, "Percentile must be between 0 and 100 inclusive."
+    values = np.mean(values, axis=0)
     values = np.abs(values)
     flat = values.flatten()
     sorted_vals = np.sort(flat)[::-1]
@@ -83,16 +84,16 @@ if __name__ == "__main__":
     with torch.no_grad():
         outputs = model(X_test)
         targets = torch.argmax(outputs, dim=1)
-    print("Xtest: ", X_test[:1])
-    custom_attributions = custom_integrated_gradients(
+    print("target: ", targets)
+    custom_attributions = (custom_integrated_gradients(
         model, X_test, torch.zeros_like(X_test), target=targets, n_steps=50
-    )
+    )).squeeze().cpu().detach().numpy()
 
-    avg_custom_attributions = (
-        torch.mean(custom_attributions, dim=0).cpu().detach().numpy()
-    )
+    # avg_custom_attributions = (
+    #     torch.mean(custom_attributions, dim=0).cpu().detach().numpy()
+    # )
 
-    print(f"Custom attribution: {avg_custom_attributions}")
+    # print(f"Custom attribution: {avg_custom_attributions}")
 
-    M = get_threshold_attributions(avg_custom_attributions, percentile=80)
+    M = get_threshold_attributions(custom_attributions, percentile=80)
     print(f"Significant features (above 80th percentile): {M}")
