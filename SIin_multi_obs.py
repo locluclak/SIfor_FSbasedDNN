@@ -22,7 +22,7 @@ def FS_basedIGs(model, x_tensor, xbaseline_tensor,target, n_steps=30, percentile
     M = ig.get_threshold_attributions(custom_attributions, percentile=80)
     return M
 
-def overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold, n_steps, return_pvalue = False, zobs = 0):
+def overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold, n_steps, z, return_pvalue = False):
     n, p = X.shape[0] //2, X.shape[1]
     
     I = [(-np.inf, np.inf)]
@@ -37,8 +37,8 @@ def overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold, n_steps,
         I = util.interval_intersection(I, construct_interval.IGscondition(model, a_temp, b_temp, X_temp, n_steps=n_steps))
         O = util.interval_intersection(O, construct_interval.outputClasscondition(model, a_temp, b_temp, X_temp, c = target[i//p]))
     
-    T = util.interval_intersection(I, construct_interval.thresholdcondition2(model, a, b, X, target, len(M), threshold = threshold, n_steps=n_steps,z=zobs))
-    
+    T = util.interval_intersection(T, construct_interval.thresholdcondition2(model, a, b, X, target, len(M), threshold = threshold, n_steps=n_steps,z=z))
+    # print(f"I: {I} O: {O} T: {T}")
     interval_oc = util.interval_intersection(
         I,
         util.interval_intersection(O, T)
@@ -55,9 +55,7 @@ def overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold, n_steps,
         return interval_oc
 
 def parametric(model, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, zmax = 20):
-    p = X.shape[1]//2
-    L1 = np.hstack((np.eye(p), np.zeros((p,p)))) 
-    L2 = np.hstack((np.zeros((p,p)), np.eye(p)))
+    n, p = X.shape[0] //2, X.shape[1]
     
     TD = []
     detectedinter = []
@@ -76,18 +74,19 @@ def parametric(model, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, z
         if z > zmax:
             break
         print(z)
-        Xdeltaz = (a + b*z).reshape((1,-1))
+        Xdeltaz = (a + b*z).reshape((2*n,p))
 
-        x_deltaz = torch.from_numpy(Xdeltaz.dot(L1.T)).float()
-        xbaseline_deltaz = torch.from_numpy(Xdeltaz.dot(L2.T)).float()
+        x_deltaz = torch.from_numpy(Xdeltaz[:n].copy()).float()
+        xbaseline_deltaz = torch.from_numpy(Xdeltaz[n:2*n].copy()).float()
 
-        target = model(x_deltaz).argmax(dim=1).item()
+        target = model(x_deltaz).argmax(dim=1)
 
-        Minloop = FS_basedIGs(model, x_deltaz, xbaseline_deltaz, target, n_steps=30, percentile=80)
+        Minloop = FS_basedIGs(model, x_deltaz, xbaseline_deltaz, target, n_steps=n_steps, percentile=threshold)
 
-        intervalinloop = overconditioning(model, a, b, Xdeltaz, etaj, Sigma, Minloop, target, threshold, n_steps)
+        intervalinloop = overconditioning(model, a, b, Xdeltaz, etaj, Sigma, Minloop, target, threshold, n_steps, z= z)
         
         countitv += 1
+        # print(f"Active set: {M}")
         # print(f"intervalinloop: {intervalinloop}")
         detectedinter = util.interval_union(detectedinter, intervalinloop)
 
@@ -118,7 +117,7 @@ def main2(model, n, p):
     target = model(x_tensor.to(device)).argmax(dim=1)
 
     M = FS_basedIGs(model, x_tensor, xbaseline_tensor, target, n_steps=30, percentile=80)
-
+    print(f"Active set obs: {M}")
     Xvec = X.flatten().reshape((-1,1))
 
     # Test statistic
@@ -135,7 +134,8 @@ def main2(model, n, p):
     b = (Sigma.dot(etaj)) / etaT_Sigma_eta
     a = (np.eye(2*n*p) - b.dot(etaj.T)).dot(Xvec)
 
-    p_value = overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold=80, n_steps=30, return_pvalue=True, zobs=zobs)
+    p_value = parametric(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
+    # p_value = overconditioning(model, a, b, X, etaj, Sigma, M, target, threshold=80, n_steps=30, return_pvalue=True, zobs=zobs)
     return p_value
 
 from functools import partial
@@ -143,42 +143,44 @@ def compute_pvalue(model, p, _=None):
     return main2(model,50, p)
 
 
-# if __name__ == "__main__":
-#     model = model_train.gendata_trainmodel(train=False, device=device)["model"]
-#     p = 10
-#     number_of_ins =50
-#     iteration = 500
-#     list_p_value = []
+if __name__ == "__main__":
+    model = model_train.gendata_trainmodel(train=False, device=device)["model"]
+    p = 10
+    number_of_ins =30
+    iteration = 500
+    list_p_value = []
 
-#     # import time
-#     # st=time.time()
-#     # print(main2(model, number_of_ins, p))
-#     # print(f"Take {time.time() - st}s")
-#     num_cores = multiprocessing.cpu_count() // 2
+    import time
+    st=time.time()
+    print(main2(model, number_of_ins, p))
+    print(f"Take {time.time() - st}s")
 
-#     compute_pvalue_with_args = partial(compute_pvalue, model, p)
-#     with multiprocessing.Pool(processes=num_cores) as pool:
-#         list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
+    
+    # num_cores = multiprocessing.cpu_count() // 2
 
-#     with open("multidatapoint_p_values.txt", "a") as f:
-#         for p_value in list_p_value:
-#             f.write(f"{p_value}\n")
+    # compute_pvalue_with_args = partial(compute_pvalue, model, p)
+    # with multiprocessing.Pool(processes=num_cores) as pool:
+    #     list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
-#     plt.hist(list_p_value)
-#     plt.title("Histogram of p-values")
-#     plt.xlabel("p-value")
-#     plt.ylabel("Density")
-#     plt.show()
-#     print(kstest(list_p_value, 'uniform'))
+    # with open("multidatapoint_p_values.txt", "a") as f:
+    #     for p_value in list_p_value:
+    #         f.write(f"{p_value}\n")
+
+    # plt.hist(list_p_value)
+    # plt.title("Histogram of p-values")
+    # plt.xlabel("p-value")
+    # plt.ylabel("Density")
+    # plt.show()
+    # print(kstest(list_p_value, 'uniform'))
 
 
-# ----- load file to check uniform
-with open("multidatapoint_p_values.txt", "r") as f:
-    list_p_value = [float(line.strip()) for line in f]
-plt.hist(list_p_value)
-plt.title("Histogram of p-values")
-plt.xlabel("p-value")
-plt.ylabel("Density")
-plt.show()
-plt.savefig("Multi_obs_p_values_histogram.png")
-print(kstest(list_p_value, 'uniform'))
+# # ----- load file to check uniform
+# with open("multidatapoint_p_values.txt", "r") as f:
+#     list_p_value = [float(line.strip()) for line in f]
+# plt.hist(list_p_value)
+# plt.title("Histogram of p-values")
+# plt.xlabel("p-value")
+# plt.ylabel("Density")
+# plt.show()
+# plt.savefig("Multi_obs_p_values_histogram.png")
+# print(kstest(list_p_value, 'uniform'))
