@@ -37,7 +37,7 @@ def custom_integrated_gradients(model, input_samples, baseline, target, n_steps=
 
 
 # Integrated Gradients using Captum
-def compute_integrated_gradients(model, X_test, feature_names, n_steps=50,device = torch.device("cpu")):
+def compute_integrated_gradients(model, X_test, n_steps=50,device = torch.device("cpu")):
     model.eval()
     model.to(device)
     ig = IntegratedGradients(model)
@@ -52,7 +52,7 @@ def compute_integrated_gradients(model, X_test, feature_names, n_steps=50,device
 
     # Compute attributions with targets
     attributions = ig.attribute(
-        input_samples, baseline, target=targets, n_steps=n_steps
+        input_samples, baseline, target=targets, n_steps=n_steps, method='riemann_middle'
     )
     return attributions
 
@@ -61,6 +61,7 @@ def compute_integrated_gradients(model, X_test, feature_names, n_steps=50,device
 def get_threshold_attributions(values, percentile) -> np.ndarray:
     assert 0 <= percentile <= 100, "Percentile must be between 0 and 100 inclusive."
     values = np.mean(values, axis=0)
+    # print(values)
     values = np.abs(values)
     flat = values.flatten()
     sorted_vals = np.sort(flat)[::-1]
@@ -84,7 +85,9 @@ if __name__ == "__main__":
     with torch.no_grad():
         outputs = model(X_test)
         targets = torch.argmax(outputs, dim=1)
-    print("target: ", targets)
+    # print("target: ", targets)
+    ig_attribution = (compute_integrated_gradients(model, X_test, n_steps=50)).squeeze().cpu().detach().numpy()
+    print(np.mean(ig_attribution, axis=0))
     custom_attributions = (custom_integrated_gradients(
         model, X_test, torch.zeros_like(X_test), target=targets, n_steps=50
     )).squeeze().cpu().detach().numpy()

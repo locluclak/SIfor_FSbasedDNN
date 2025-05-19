@@ -239,35 +239,38 @@ def thresholdcondition(model, a, b, X, target, number_feas, threshold, n_steps):
     return interval
 
 
-def thresholdcondition2(model, a, b, X, target, number_feas, threshold, n_steps,z):
+def thresholdcondition2(model, a, b, X, ig_value, target, number_feas, threshold, n_steps,z):
     n, p = X.shape[0] //2, X.shape[1]
     # print(n,p)
 
-    alphas = torch.linspace(0, 1, n_steps)
-    model.eval()
+    # alphas = torch.linspace(0, 1, n_steps)
+    # model.eval()
 
     x_tensor = torch.from_numpy(X[:n]).float()
     xbaseline_tensor = torch.from_numpy(X[n:2*n]).float()
 
-    ig = torch.zeros_like(x_tensor)
-    for alpha in alphas:
-        # Interpolate between baseline and input
-        interpolated = xbaseline_tensor + alpha * (x_tensor - xbaseline_tensor)
-        interpolated = interpolated.to(dtype=torch.float32)
-        interpolated.requires_grad_(True)
-        # Compute model output
-        outputs = model(interpolated)
+    # ig = torch.zeros_like(x_tensor)
+    # for alpha in alphas:
+    #     # Interpolate between baseline and input
+    #     interpolated = xbaseline_tensor + alpha * (x_tensor - xbaseline_tensor)
+    #     interpolated = interpolated.to(dtype=torch.float32)
+    #     interpolated.requires_grad_(True)
+    #     # Compute model output
+    #     outputs = model(interpolated)
 
-        # Compute gradients with respect to the interpolated input
-        target_outputs = outputs[torch.arange(outputs.size(0)), target]
-        gradients = torch.autograd.grad(target_outputs.sum(), interpolated, create_graph=True)[0]
-        ig += gradients / n_steps
+    #     # Compute gradients with respect to the interpolated input
+    #     target_outputs = outputs[torch.arange(outputs.size(0)), target]
+    #     gradients = torch.autograd.grad(target_outputs.sum(), interpolated, create_graph=True)[0]
+    #     ig += gradients / n_steps
 
     # attributions = torch.mean(ig * (x_tensor - xbaseline_tensor), dim=0)
     # attributions = attributions.detach().cpu().numpy()
     # print("attributions", attributions)
 
-    ig = (ig.detach().cpu().numpy()).reshape((n*p,1))
+    # ig = (ig.detach().cpu().numpy()).reshape((n*p,1))
+    ig_value = ig_value / (x_tensor - xbaseline_tensor).detach().cpu().numpy()
+    ig = ig_value.reshape((n*p,1))
+    # print(ig)
     a_ = (a[:n*p] - a[n*p:2*n*p]).copy()
     b_ = (b[:n*p] - b[n*p:2*n*p]).copy()
 

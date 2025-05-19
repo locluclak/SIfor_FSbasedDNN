@@ -8,7 +8,7 @@ import numpy as np
 import os
 
 # global device
-# device = torch.device("cuda")
+device = torch.device("cuda")
 # Set random seed for reproducibility
 # torch.manual_seed(42)
 # np.random.seed(42)
@@ -18,11 +18,17 @@ class Classifier(nn.Module):
     def __init__(self, input_size):
         super(Classifier, self).__init__()
         self.model = nn.Sequential(
-            nn.Linear(input_size, 32),
+            nn.Linear(input_size, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64,32),
             nn.ReLU(),
             nn.Linear(32, 16),
             nn.ReLU(),
-            nn.Linear(16, 2)
+            nn.Linear(16, 8),
+            nn.ReLU(),
+            nn.Linear(8, 2)
         )
 
     def forward(self, x):
@@ -37,8 +43,7 @@ def generate_data(n, p, col_means=None, col_stds=None):
         n_informative=6,
         n_redundant=2,
         n_clusters_per_class=2,
-        class_sep=0.8,
-        random_state=42,
+        class_sep=0.8
     )
     if col_means is not None and col_stds is not None:
         for i in range(p):
@@ -67,7 +72,7 @@ def load_and_preprocess_data(X, y, batch_size=32):
 
 # Training function
 def train_model(
-    model, train_loader, test_loader, epochs=200, lr=0.002, de=torch.device("cpu")
+    model, train_loader, test_loader, epochs=200, lr=0.01, de=torch.device("cpu")
 ):
     model.train()
     criterion = nn.CrossEntropyLoss()
@@ -93,7 +98,7 @@ def train_model(
         train_loss /= len(train_loader.dataset)
         train_accuracy = train_correct / train_total
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 5 == 0:
             model.eval()
             test_loss = 0
             test_correct = 0
@@ -134,7 +139,7 @@ def gendata_trainmodel(n_samples=2000, n_features=10, train=False, device = torc
     if train or not os.path.exists(save_model):
         print("Training the model...")
         train_model(
-            model, train_loader, test_loader, epochs=200, lr=0.002, de=device
+            model, train_loader, test_loader, epochs=200, lr=0.01, de=device
         )
         torch.save(model.state_dict(), save_model)
         print(f"Model saved as '{save_model}'")
@@ -144,3 +149,6 @@ def gendata_trainmodel(n_samples=2000, n_features=10, train=False, device = torc
         model.eval()
         print("Model loaded successfully")
     return {"model": model, "test_data": (X_test, y_test)}
+
+if __name__ == "__main__":
+    gendata_trainmodel(n_samples=5000, n_features=10, train=True, device= torch.device("cuda"))
