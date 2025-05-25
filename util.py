@@ -68,14 +68,14 @@ def interval_union(a, b):
             result.append(current)
     return result
 
-def solve_quadratic_inequality(a, b, c,seed = 0):
+def solve_quadratic_inequality(a, b, c):
     """ ax^2 + bx +c <= 0 """
     a, b, c = float(a), float(b), float(c)
-    if abs(a) < 1e-16:
+    if abs(a) < 1e-10:
         a = 0
-    if abs(b) < 1e-16:
+    if abs(b) < 1e-10:
         b = 0
-    if abs(c) < 1e-16:
+    if abs(c) < 1e-10:
         c = 0
     if a == 0:
         if b > 0:
@@ -84,11 +84,11 @@ def solve_quadratic_inequality(a, b, c,seed = 0):
             if c <= 0:
                 return [(-np.inf, np.inf)]
             else:
-                print('Error bx + c', seed)
+                print('Error bx + c')
                 return 
         else:
             return [(np.around(-c / b, 8), np.inf)]
-    print('SOS quadratic')
+
     delta = b*b - 4*a*c
     if delta < 0:
         if a < 0:

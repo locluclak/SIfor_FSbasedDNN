@@ -24,20 +24,16 @@ def FS_basedIGs(model, x_tensor, xbaseline_tensor,target, n_steps=30, percentile
 
 def overconditioning(model, a, b, X, etaj, Sigma, M, ig, target, threshold, n_steps, z, return_pvalue = False):
     n, p = X.shape[0] //2, X.shape[1]
-    
-    I = [(-np.inf, np.inf)]
-    O = [(-np.inf, np.inf)]
-    T = [(-np.inf, np.inf)]
-    for i in range(0,n*p,p):
-        a_temp = np.vstack((a[i:i+p], a[i+n*p:i+n*p+p]))
-        b_temp = np.vstack((b[i:i+p], b[i+n*p:i+n*p+p]))
+    # t1 = time.time()
+    I = construct_interval.IGscondition(model, a, b, X, n_steps=n_steps)
+    # t2 = time.time()
 
-        X_temp = np.hstack((X[i//p], X[i//p+n])).reshape(1,-1)
-
-        I = util.interval_intersection(I, construct_interval.IGscondition(model, a_temp, b_temp, X_temp, n_steps=n_steps))
-        O = util.interval_intersection(O, construct_interval.outputClasscondition(model, a_temp, b_temp, X_temp, c = target[i//p]))
+    O = construct_interval.outputClasscondition(model, a, b, X, c = target)
+    # t3 = time.time()
     
-    T = util.interval_intersection(T, construct_interval.thresholdcondition2(model, a, b, X, ig, target, len(M), threshold = threshold, n_steps=n_steps,z=z))
+    T = construct_interval.thresholdcondition2(model, a, b, X, ig, target, len(M), threshold = threshold, n_steps=n_steps,z=z)
+    # t4 = time.time()
+    # print(f"Time I: {t2-t1}, O: {t3-t2}, T: {t4-t3}")
     # print(f"I: {I} O: {O} T: {T}")
     interval_oc = util.interval_intersection(
         I,
@@ -46,7 +42,6 @@ def overconditioning(model, a, b, X, etaj, Sigma, M, ig, target, threshold, n_st
 
     if return_pvalue:
         Xvec = X.flatten().reshape((-1,1))
-
         etaX= (etaj.T.dot(Xvec)).item()
         etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
         p_value = util.compute_p_value(interval_oc, etaX, etaT_Sigma_eta)
@@ -134,13 +129,13 @@ def main2(model, n, p):
     b = (Sigma.dot(etaj)) / etaT_Sigma_eta
     a = (np.eye(2*n*p) - b.dot(etaj.T)).dot(Xvec)
 
-    p_value = parametric(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
-    # p_value = overconditioning(model, a, b, X, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=True, z=zobs)
+    # p_value = parametric(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
+    p_value = overconditioning(model, a, b, X, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=True, z=zobs)
     return p_value
 
 from functools import partial
 def compute_pvalue(model, p, _=None):
-    return main2(model,50, p)
+    return main2(model,100, p)
 
 
 if __name__ == "__main__":
@@ -151,27 +146,27 @@ if __name__ == "__main__":
     list_p_value = []
 
     import time
-    st=time.time()
-    print(main2(model, number_of_ins, p))
-    print(f"Take {time.time() - st}s")
+    # st=time.time()
+    # print(main2(model, number_of_ins, p))
+    # print(f"Take {time.time() - st}s")
 
     
-    # num_cores = multiprocessing.cpu_count() // 2
+    num_cores = multiprocessing.cpu_count() // 2
 
-    # compute_pvalue_with_args = partial(compute_pvalue, model, p)
-    # with multiprocessing.Pool(processes=num_cores) as pool:
-    #     list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
+    compute_pvalue_with_args = partial(compute_pvalue, model, p)
+    with multiprocessing.Pool(processes=num_cores) as pool:
+        list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
-    # with open("multidatapoint_p_values.txt", "a") as f:
-    #     for p_value in list_p_value:
-    #         f.write(f"{p_value}\n")
+    with open("multidatapoint_p_values.txt", "a") as f:
+        for p_value in list_p_value:
+            f.write(f"{p_value}\n")
 
-    # plt.hist(list_p_value)
-    # plt.title("Histogram of p-values")
-    # plt.xlabel("p-value")
-    # plt.ylabel("Density")
-    # plt.show()
-    # print(kstest(list_p_value, 'uniform'))
+    plt.hist(list_p_value)
+    plt.title("Histogram of p-values")
+    plt.xlabel("p-value")
+    plt.ylabel("Density")
+    plt.show()
+    print(kstest(list_p_value, 'uniform'))
 
 
 # # ----- load file to check uniform
