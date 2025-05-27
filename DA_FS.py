@@ -115,6 +115,7 @@ def parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin
         xt_deltaz = Xdeltaz[ns:ns+nt]
 
         GAMMA, S, q, B = DA.SingleOT(xs_deltaz, xt_deltaz)
+        GAMMAvec = np.kron(GAMMA, np.eye(p))
 
         intervalDA = DA.interval_DA(ns, nt ,p, B, S, q, a[:(ns+nt)*p], b[:(ns+nt)*p])
         
@@ -124,6 +125,7 @@ def parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin
                 break
         zuv = max(lu,zmin)
         while zuv <= ru:
+            print(zuv)
             if zuv>=zmax:
                 break
             Xdeltaz = (a + b*zuv).reshape((2*(ns+nt),p))
@@ -140,7 +142,6 @@ def parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin
             Xtrans_baseline = np.vstack((Xtrans, xbaseline_deltaz))
             M_z, ig_value = FS_basedIGs(model, x_tensor, xbaseline_tensor, target, n_steps=threshold, percentile=threshold)
 
-            GAMMAvec = np.kron(GAMMA, np.eye(p))
             a_ = np.vstack((GAMMAvec.dot(a[:(ns+nt)*p]),a[(ns+nt)*p:]))
             b_ = np.vstack((GAMMAvec.dot(b[:(ns+nt)*p]),b[(ns+nt)*p:]))
 
@@ -148,24 +149,25 @@ def parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold, n_steps, zmin
                                     a_,
                                     b_, 
                                     Xtrans_baseline, etaj, Sigma, M_z, ig_value, target, threshold=80, n_steps=30, return_pvalue=False, z=zuv)
+            oc = util.interval_intersection(intervalFS,intervalDA)
             
-            print(M)
-            print(M_z)
             if sorted(M) == sorted(M_z):
-                Z = util.interval_union(Z, util.interval_intersection(intervalFS,intervalDA))
-            print(intervalFS)
-            zuv = intervalFS[0][1] + 0.0001 # ruv
+                Z = util.interval_union(Z, oc)
+            print(M, M_z)
+            
+            # print(intervalFS)
+            zuv = oc[-1][1] + 0.0001 # ruv
         z = zuv
 
     etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
     etaX= (etaj.T.dot(X.reshape(-1,1))).item()
-    
+    print(Z)
     p_value = util.compute_p_value(Z, etaX, etaT_Sigma_eta)
     return p_value
 
 def main2(model, ns, nt, p):
     seed = random.randint(0, 2**32 - 1) 
-    np.random.seed(seed) 
+    np.random.seed(1543928882) 
     print(seed)
     xs = np.random.randn(ns, p)+3
     ys = np.random.randint(0, 2, size=ns)
@@ -209,35 +211,40 @@ def main2(model, ns, nt, p):
     etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
     b = (Sigma.dot(etaj)) / etaT_Sigma_eta
     a = (np.eye(2*(ns+nt)*p) - b.dot(etaj.T)).dot(Xvec)
-    
-    p_value = parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax = 20)
-
-    # st = time.time()
-    # intervalDA = DA.interval_DA(ns, nt ,p, B, S, q, a[:(ns+nt)*p], b[:(ns+nt)*p])
-    # print("DA:", time.time() - st, intervalDA)
+    # -0.175
+    # try:
+    #     p_value = parametric2(model, ns, nt, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -0.18, zmax = -0.05)
+    #     print(zobs)
+    #     print(seed)
+    # except Exception as e:
+    #     raise Exception(f"Seed: {seed}") from e
+    print("Active set:",M)
+    st = time.time()
+    intervalDA = DA.interval_DA(ns, nt ,p, B, S, q, a[:(ns+nt)*p], b[:(ns+nt)*p])
+    print("DA:", time.time() - st, intervalDA)
     # p_value = parametric(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
     
-    # GAMMAvec = np.kron(GAMMA, np.eye(p))
-    # a_ = np.vstack((GAMMAvec.dot(a[:(ns+nt)*p]),a[(ns+nt)*p:]))
-    # b_ = np.vstack((GAMMAvec.dot(b[:(ns+nt)*p]),b[(ns+nt)*p:]))
-    # st = time.time()
+    GAMMAvec = np.kron(GAMMA, np.eye(p))
+    a_ = np.vstack((GAMMAvec.dot(a[:(ns+nt)*p]),a[(ns+nt)*p:]))
+    b_ = np.vstack((GAMMAvec.dot(b[:(ns+nt)*p]),b[(ns+nt)*p:]))
+    st = time.time()
     
-    # intervalFS = overconditioning(model, 
-    #                                 a_,
-    #                                 b_, 
-    #                                 Xtrans_baseline, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=False, z=zobs)
-    # print(f"Take {time.time() - st}s")
+    intervalFS = overconditioning(model, 
+                                    a_,
+                                    b_, 
+                                    Xtrans_baseline, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=False, z=zobs)
+    print(f"Take {time.time() - st}s")
 
 
 
-    # finalinterval = util.interval_intersection(intervalDA, intervalFS)
-    # # print(f"Final interval: {finalinterval}, Length: {(finalinterval[0][1] - finalinterval[0][0])}")
-    # etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
-    # try:
-    #     p_value = util.compute_p_value(finalinterval, etaj.T.dot(Xvec).item(), etaT_Sigma_eta)
-    # except:
-    #     print("Seed", seed)
-    #     return 0
+    finalinterval = util.interval_intersection(intervalDA, intervalFS)
+    print(f"Final interval: {finalinterval}, Length: {(finalinterval[0][1] - finalinterval[0][0])}")
+    etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
+    try:
+        p_value = util.compute_p_value(finalinterval, etaj.T.dot(Xvec).item(), etaT_Sigma_eta)
+    except:
+        print("Seed", seed)
+        return 0
     return p_value
 
 from functools import partial
@@ -249,11 +256,11 @@ if __name__ == "__main__":
     model = model_train.gendata_trainmodel(train=False, device=device)["model"]
     p = 10
     number_of_ins =30
-    iteration = 500
+    iteration = 120
     list_p_value = []
 
     for _ in range(1):
-        print(main2(model, 200, 10, p))
+        print(main2(model, 50, 15, p))
        
 
     

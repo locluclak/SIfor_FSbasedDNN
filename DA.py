@@ -6,21 +6,25 @@ def interval_DA(ns, nt, p, B, S_, h_, a, b):
     Bc = np.delete(np.array(range(ns*nt)), B)
 
     OMEGA = OptimalTransport.constructOMEGA(ns,nt)
-    
-    w_tilde = 0
-    r_tilde = 0
-    o_tilde = 0
+
+    w = np.zeros((ns*nt, 1))
+    r = np.zeros((ns*nt, 1))
+    o = np.zeros((ns*nt, 1))
+
 
     for k in range(p):
         epk = np.zeros((p,1))
-        epk[k][0] = 1
+        epk[k][0] = 1.0
         OMEGA_kron_ej = np.kron(OMEGA, epk.T)
         OMEGA_kron_ej_dota = OMEGA_kron_ej.dot(a)
         OMEGA_kron_ej_dotb = OMEGA_kron_ej.dot(b)
-        w_tilde += OMEGA_kron_ej_dota * OMEGA_kron_ej_dota
-        r_tilde += 2*OMEGA_kron_ej_dota * OMEGA_kron_ej_dotb
-        o_tilde += OMEGA_kron_ej_dotb * OMEGA_kron_ej_dotb
+        w = w + OMEGA_kron_ej_dota**2
+        r = r + 2*OMEGA_kron_ej_dota * OMEGA_kron_ej_dotb
+        o = o + OMEGA_kron_ej_dotb**2
 
+        # print(w_tilde.flatten())
+        # print(r_tilde.flatten())
+        # print(o_tilde.flatten())
     # print(w_tilde + r_tilde*z + o_tilde*z**2)
 
     # Omega_a = OMEGA.dot(a)
@@ -29,17 +33,18 @@ def interval_DA(ns, nt, p, B, S_, h_, a, b):
   
     S_B_invS_Bc = np.linalg.inv(S_[:, B]).dot(S_[:, Bc])
 
-    w = (w_tilde[Bc, :].T - w_tilde[B, :].T.dot(S_B_invS_Bc)).T
-    r = (r_tilde[Bc, :].T - r_tilde[B, :].T.dot(S_B_invS_Bc)).T
-    o = (o_tilde[Bc, :].T - o_tilde[B, :].T.dot(S_B_invS_Bc)).T
+    w_tilde = (w[Bc, :].T - w[B, :].T.dot(S_B_invS_Bc)).T
+    r_tilde = (r[Bc, :].T - r[B, :].T.dot(S_B_invS_Bc)).T
+    o_tilde = (o[Bc, :].T - o[B, :].T.dot(S_B_invS_Bc)).T
+
     # print(w.shape)
     list_intervals = []
-    interval = bst_solving_eq.solve_system_of_quadratics(-o,-r,-w)
+    interval = bst_solving_eq.solve_system_of_quadratics(-o_tilde,-r_tilde,-w_tilde)
     # interval = [(-np.inf, np.inf)]
-    # for i in range(w.shape[0]):
-    #     g3 = - o[i][0]
-    #     g2 = - r[i][0]
-    #     g1 = - w[i][0]
+    # for i in range(w_tilde.shape[0]):
+    #     g3 = - o_tilde[i][0]
+    #     g2 = - r_tilde[i][0]
+    #     g1 = - w_tilde[i][0]
     #     itv = util.solve_quadratic_inequality(g3,g2,g1)
     #     interval = util.interval_intersection(interval, itv)
     return interval

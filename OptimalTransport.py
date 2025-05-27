@@ -59,7 +59,7 @@ def solveOT(ns, nt, S_, h_, X_):
     # Solve wasserstein distance
     res = linprog(cost, A_ub=-np.identity(ns * nt), b_ub=np.zeros((ns * nt, 1)), 
                   A_eq=S_, b_eq=h_, method='simplex', 
-                  options={'maxiter': 10000})
+                  options={'maxiter': 100000})
     # Transport Map
     Tobs = res.x.reshape((ns,nt))
 
