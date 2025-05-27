@@ -232,7 +232,7 @@ def thresholdcondition2(model, a, b, X, ig_value, target, number_feas, threshold
     x_tensor = torch.from_numpy(X[:n]).float()
     xbaseline_tensor = torch.from_numpy(X[n:2*n]).float()
 
-    ig_value = ig_value / (x_tensor - xbaseline_tensor).detach().cpu().numpy()
+    ig_value = (ig_value / (x_tensor - xbaseline_tensor)).detach().cpu().numpy()
     ig = ig_value.reshape((n*p,1))
     # print(ig)
     a_ = (a[:n*p] - a[n*p:2*n*p]).copy()

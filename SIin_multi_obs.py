@@ -141,7 +141,7 @@ def parametric2(model,a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, z
     p_value = util.compute_p_value(Z, etaX, etaT_Sigma_eta)
     return p_value
 def main2(model, n, p):
-    seed = 3552445323
+    seed = 90224537
     seed = random.randint(0, 2**32 - 1) 
     np.random.seed(seed) 
     print("Seed:",seed)
@@ -201,27 +201,27 @@ if __name__ == "__main__":
 
     import time
     # st=time.time()
-    print("p-value:",main2(model, number_of_ins, p))
+    # print("p-value:",main2(model, number_of_ins, p))
     # print(f"Take {time.time() - st}s")
 
     
-    # num_cores = multiprocessing.cpu_count() // 2
-    # import os
-    # os.environ["MKL_NUM_THREADS"] = "1" 
-    # os.environ["NUMEXPR_NUM_THREADS"] = "1" 
-    # os.environ["OMP_NUM_THREADS"] = "1" 
-    # compute_pvalue_with_args = partial(compute_pvalue, model, p)
-    # with multiprocessing.Pool(processes=num_cores) as pool:
-    #     list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
+    num_cores = multiprocessing.cpu_count() 
+    import os
+    os.environ["MKL_NUM_THREADS"] = "1" 
+    os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+    os.environ["OMP_NUM_THREADS"] = "1" 
+    compute_pvalue_with_args = partial(compute_pvalue, model, p)
+    with multiprocessing.Pool(processes=num_cores) as pool:
+        list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
 
 
-    # plt.hist(list_p_value)
-    # plt.title("Histogram of p-values")
-    # plt.xlabel("p-value")
-    # plt.ylabel("Density")
-    # plt.show()
-    # print(kstest(list_p_value, 'uniform'))
+    plt.hist(list_p_value)
+    plt.title("Histogram of p-values")
+    plt.xlabel("p-value")
+    plt.ylabel("Density")
+    plt.show()
+    print(kstest(list_p_value, 'uniform'))
 
 
 # # ----- load file to check uniform
