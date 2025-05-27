@@ -4,7 +4,7 @@ mp.dps = 500
 
 def compute_p_value(intervals, test_stat, etaT_Sigma_eta):
     denominator = 0
-    numerator = 0
+    numerator = None
 
     for i in intervals:
         leftside, rightside = i

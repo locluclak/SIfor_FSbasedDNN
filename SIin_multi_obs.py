@@ -41,8 +41,8 @@ def overconditioning(model, a, b, X, etaj, Sigma, M, ig, target, threshold, n_st
         I,
         util.interval_intersection(O, T)
     )
-
     if return_pvalue:
+        print("interval oc:", interval_oc)
         Xvec = X.flatten().reshape((-1,1))
         etaX= (etaj.T.dot(Xvec)).item()
         etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
@@ -116,19 +116,20 @@ def parametric2(model,a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, z
         x_tensor = torch.from_numpy(x_deltaz).float()
         xbaseline_tensor = torch.from_numpy(xbaseline_deltaz).float()
 
-        target = model(x_tensor.to(device)).argmax(dim=1)
+        target_z = model(x_tensor).argmax(dim=1)
         # Xtrans_baseline = np.vstack((Xtrans, xbaseline_deltaz))
-        M_z, ig_value = FS_basedIGs(model, x_tensor, xbaseline_tensor, target, n_steps=threshold, percentile=threshold)
+        M_z, ig_value = FS_basedIGs(model, x_tensor, xbaseline_tensor, target_z, n_steps=n_steps, percentile=threshold)
 
         intervalFS = overconditioning(model, 
                                 a,
                                 b, 
-                                Xdeltaz, etaj, Sigma, M_z, ig_value, target, threshold=80, n_steps=30, return_pvalue=False, z=z)
+                                Xdeltaz, etaj, Sigma, M_z, ig_value, target_z, threshold=80, n_steps=30, return_pvalue=False, z=z)
         # oc = util.interval_intersection(intervalFS,intervalDA)
         oc = intervalFS
+        # print(f"M: {M} Mz: {M_z} interval: {intervalFS}")
+
         if sorted(M) == sorted(M_z):
             Z = util.interval_union(Z, oc)
-        # print(M, M_z)
             
             # print(intervalFS)
         z = oc[-1][1] + 0.0001 # ruv
@@ -140,9 +141,10 @@ def parametric2(model,a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, z
     p_value = util.compute_p_value(Z, etaX, etaT_Sigma_eta)
     return p_value
 def main2(model, n, p):
+    seed = 3552445323
     seed = random.randint(0, 2**32 - 1) 
     np.random.seed(seed) 
-    print(seed)
+    print("Seed:",seed)
     x = np.random.randn(n, p)
     xbaseline = np.random.randn(n, p)
 
@@ -158,7 +160,7 @@ def main2(model, n, p):
     target = model(x_tensor.to(device)).argmax(dim=1)
 
     M, ig_value = FS_basedIGs(model, x_tensor, xbaseline_tensor, target, n_steps=30, percentile=80)
-    print(f"Active set obs: {M}")
+    # print(f"Active set obs: {M}")
     Xvec = X.flatten().reshape((-1,1))
 
     # Test statistic
@@ -170,24 +172,24 @@ def main2(model, n, p):
     etaj = np.dot((np.hstack((In_kron_ej, -1*In_kron_ej))).T, np.ones((n, 1)) / n )
 
     zobs = (etaj.T.dot(Xvec)).item()
-
+    # print("zobs: ", zobs)
     etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
     b = (Sigma.dot(etaj)) / etaT_Sigma_eta
     a = (np.eye(2*n*p) - b.dot(etaj.T)).dot(Xvec)
     try:
         p_value = parametric2(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
-    # p_value = overconditioning(model, a, b, X, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=True, z=zobs)
+        # p_value = overconditioning(model, a, b, X, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=True, z=zobs)
     except Exception as e:
-        raise Exception(f"Seed: {seed}") from e
+        raise Exception(f"Seed: {seed}, Active set: {M}, zobs: {zobs}") from e
     
-    with open("multidatapoint_p_values.txt", "a") as f:
+    with open(f"./experiments/multidatapoint_p_values_{n}_{p}.txt", "a") as f:
         # for p_value in list_p_value:
         f.write(f"{p_value}\n")
     return p_value
 
 from functools import partial
 def compute_pvalue(model, p, _=None):
-    return main2(model,100, p)
+    return main2(model,50, p)
 
 
 if __name__ == "__main__":
@@ -198,28 +200,28 @@ if __name__ == "__main__":
     list_p_value = []
 
     import time
-    st=time.time()
-    print(main2(model, number_of_ins, p))
-    print(f"Take {time.time() - st}s")
+    # st=time.time()
+    print("p-value:",main2(model, number_of_ins, p))
+    # print(f"Take {time.time() - st}s")
 
     
     # num_cores = multiprocessing.cpu_count() // 2
-    import os
-    os.environ["MKL_NUM_THREADS"] = "1" 
-    os.environ["NUMEXPR_NUM_THREADS"] = "1" 
-    os.environ["OMP_NUM_THREADS"] = "1" 
-    compute_pvalue_with_args = partial(compute_pvalue, model, p)
-    with multiprocessing.Pool(processes=num_cores) as pool:
-        list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
+    # import os
+    # os.environ["MKL_NUM_THREADS"] = "1" 
+    # os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+    # os.environ["OMP_NUM_THREADS"] = "1" 
+    # compute_pvalue_with_args = partial(compute_pvalue, model, p)
+    # with multiprocessing.Pool(processes=num_cores) as pool:
+    #     list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
 
 
-    plt.hist(list_p_value)
-    plt.title("Histogram of p-values")
-    plt.xlabel("p-value")
-    plt.ylabel("Density")
-    plt.show()
-    print(kstest(list_p_value, 'uniform'))
+    # plt.hist(list_p_value)
+    # plt.title("Histogram of p-values")
+    # plt.xlabel("p-value")
+    # plt.ylabel("Density")
+    # plt.show()
+    # print(kstest(list_p_value, 'uniform'))
 
 
 # # ----- load file to check uniform
