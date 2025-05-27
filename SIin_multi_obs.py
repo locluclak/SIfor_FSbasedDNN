@@ -141,7 +141,7 @@ def parametric2(model,a, b, X, etaj, Sigma, M, threshold, n_steps, zmin = -20, z
     return p_value
 def main2(model, n, p):
     seed = random.randint(0, 2**32 - 1) 
-    np.random.seed(1543928882) 
+    np.random.seed(seed) 
     print(seed)
     x = np.random.randn(n, p)
     xbaseline = np.random.randn(n, p)
@@ -174,9 +174,15 @@ def main2(model, n, p):
     etaT_Sigma_eta = (etaj.T.dot(Sigma.dot(etaj))).item()
     b = (Sigma.dot(etaj)) / etaT_Sigma_eta
     a = (np.eye(2*n*p) - b.dot(etaj.T)).dot(Xvec)
-
-    p_value = parametric2(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
+    try:
+        p_value = parametric2(model, a, b, X, etaj, Sigma, M, threshold=80, n_steps=30, zmin = -20, zmax=20)
     # p_value = overconditioning(model, a, b, X, etaj, Sigma, M, ig_value, target, threshold=80, n_steps=30, return_pvalue=True, z=zobs)
+    except Exception as e:
+        raise Exception(f"Seed: {seed}") from e
+    
+    with open("multidatapoint_p_values.txt", "a") as f:
+        # for p_value in list_p_value:
+        f.write(f"{p_value}\n")
     return p_value
 
 from functools import partial
@@ -198,21 +204,22 @@ if __name__ == "__main__":
 
     
     # num_cores = multiprocessing.cpu_count() // 2
+    import os
+    os.environ["MKL_NUM_THREADS"] = "1" 
+    os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+    os.environ["OMP_NUM_THREADS"] = "1" 
+    compute_pvalue_with_args = partial(compute_pvalue, model, p)
+    with multiprocessing.Pool(processes=num_cores) as pool:
+        list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
-    # compute_pvalue_with_args = partial(compute_pvalue, model, p)
-    # with multiprocessing.Pool(processes=num_cores) as pool:
-    #     list_p_value = pool.map(compute_pvalue_with_args, range(iteration))
 
-    # with open("multidatapoint_p_values.txt", "a") as f:
-    #     for p_value in list_p_value:
-    #         f.write(f"{p_value}\n")
 
-    # plt.hist(list_p_value)
-    # plt.title("Histogram of p-values")
-    # plt.xlabel("p-value")
-    # plt.ylabel("Density")
-    # plt.show()
-    # print(kstest(list_p_value, 'uniform'))
+    plt.hist(list_p_value)
+    plt.title("Histogram of p-values")
+    plt.xlabel("p-value")
+    plt.ylabel("Density")
+    plt.show()
+    print(kstest(list_p_value, 'uniform'))
 
 
 # # ----- load file to check uniform
